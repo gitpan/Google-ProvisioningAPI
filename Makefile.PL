@@ -5,8 +5,13 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME              => 'Google::ProvisioningAPI',
     VERSION_FROM      => 'lib/Google/ProvisioningAPI.pm', # finds $VERSION
-    PREREQ_PM         => {}, # e.g., Module::Name => 1.1
+    PREREQ_PM         => { 	'Carp' => 0,
+							'LWP::UserAgent' => 0,
+							'HTTP::Request' => 0,
+							'Encode' => 0,
+							'XML::Simple' => 0
+						}, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM  => 'lib/Google/ProvisioningAPI.pm', # retrieve abstract from module
-       AUTHOR         => 'root <root@localdomain>') : ()),
+       AUTHOR         => 'Johan Reinalda <johan@reinalda.net>') : ()),
 );

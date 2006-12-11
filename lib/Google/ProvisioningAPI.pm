@@ -10,7 +10,7 @@ use 5.008005;
 
 use strict;
 use warnings;
-use vars qw($VERSION $APIVersion);
+use vars qw($VERSION);
 
 use Carp;
 use LWP::UserAgent qw(:strict);
@@ -43,12 +43,12 @@ use XML::Simple;
 #
 #);
 
-our $VERSION = '0.1';
+our $VERSION = '0.11';
 our $APIVersion = '1.0';
 
 #some constants
 #web agent identification
-use constant GOOGLEAGENT => 'Google_ProvisioningAPI-perl/0.1';
+use constant GOOGLEAGENT => 'Google_ProvisioningAPI-perl/0.11';
 
 #url for Google API token login
 use constant GOOGLEHOST => 'www.google.com';
@@ -335,6 +335,48 @@ EOL
 
 ### HOSTED ACCOUNT routines ###
 
+sub CreateAccountEmail
+{
+	#get object reference
+	my $self = shift();
+
+	$self->dprint( "CreateAccount called\n");
+
+	#check remaining arguments
+	if(@_ < 4) {
+		$self->dprint( "CreateAccountEmail method requires at least 4 arguments!\n");
+		$self->{result}->{reason} = "CreateAccountEmail method requires at least 4 arguments!";
+		return 0;
+	}
+
+	#get arguments
+    my $userName = shift();
+	my $firstName = shift();
+    my $lastName = shift();
+    my $password = shift();
+	my $quota = shift() if (@_);	#this one is optional
+
+	my $body = <<"EOL";
+	<hs:CreateSection>
+		<hs:firstName>$firstName</hs:firstName>
+		<hs:lastName>$lastName</hs:lastName>
+		<hs:password>$password</hs:password>
+		<hs:userName>$userName</hs:userName>
+EOL
+
+	if(defined($quota)) {
+		$body .= "\t\t<hs:quota>$quota<\/hs:quota>\n";
+	}
+
+	#add the final end-of-section tab
+	$body .= "\t<\/hs:CreateSection>\n";
+
+
+	return $self->Request('Account','Create/Account/Email',$body);
+
+}
+
+#NOTE: this API call may be discontinued!
 sub CreateAccount
 {
 	#get object reference
@@ -350,10 +392,10 @@ sub CreateAccount
 	}
 
 	#get arguments
-    my $userName = shift() if (@_);
-	my $firstName = shift() if (@_);
-    my $lastName = shift() if (@_);
-    my $password = shift() if (@_);
+    my $userName = shift();
+	my $firstName = shift();
+    my $lastName = shift();
+    my $password = shift();
 
 	my $body = <<"EOL";
 	<hs:CreateSection>
@@ -367,7 +409,6 @@ EOL
 	return $self->Request('Account','Create/Account',$body);
 
 }
-
 
 sub UpdateAccount
 {
@@ -912,6 +953,8 @@ sub dprint
 1;
 __END__
 
+=pod
+
 =head1 NAME
 
 Google::ProvisioningAPI - Perl module that implements the Google Apps for Your Domain Provisioning API
@@ -923,19 +966,34 @@ Google::ProvisioningAPI - Perl module that implements the Google Apps for Your D
 
   $google->CreateAccount($userName, $firstName, $lastName, $password);
   $google->RetrieveAccount($userName);
-  
+
 =head1 REQUIREMENTS
 
-  Google::ProvisioningAPI requires the following modules to be installed:
+Google::ProvisioningAPI requires the following modules to be installed:
 
-  C<LWP::UserAgent>
-  C<HTTP::Request>
-  C<Encode>
-  C<XML::Simple>
+=over
+
+=item
+
+C<LWP::UserAgent>
+
+=item
+
+C<HTTP::Request>
+
+=item
+
+C<Encode>
+
+=item
+
+C<XML::Simple>
+
+=back
 
 =head1 DESCRIPTION
 
-Google::ProvisioningAPI provides a simple interface to the Google Apps for Your Domain (GAFYD) Provisioning API.
+Google::ProvisioningAPI provides a simple interface to the Google Apps for Your Domain Provisioning API.
 It uses the C<LWP::UserAgent> module for the HTTP transport, and the C<HTTP::Request> module for the HTTP request and response.
 
 =head2 Examples
@@ -944,6 +1002,8 @@ For a complete description of the meaning of the following methods, see the Goog
 
 	#create the object
 	$google = new Google:ProvisioningAPI($domain,$admin,$password) || die "Cannot create google object";
+	
+	print 'Module version: ' . $google->VERSION . "\nAPI Version: " . $google->version() . "\n";
 	
 	#create a hosted account
 	if( $google->CreateAccount( $userName, $firstName, $lastName, $password ) ) 
@@ -957,7 +1017,7 @@ For a complete description of the meaning of the following methods, see the Goog
 	#retrieving account data
 	if($google->RetrieveAccount($userName))
 	{
-		print "Username: " . $google->result{userName} . "\n";
+		print 'Username: ' . $google->{result}->{RetrievalSection}->{userName} . "\n";
 		print 'firstName: ' . $google->{result}->{RetrievalSection}->{firstName} . "\n";
 		print 'lastName: ' . $google->{result}->{RetrievalSection}->{lastName} . "\n";
 		print 'accountStatus: ' . $google->{result}->{RetrievalSection}->{accountStatus} . "\n";
@@ -974,7 +1034,8 @@ For a complete description of the meaning of the following methods, see the Goog
 	#accessing the HTML data as it was received from the Google servers:
 	print $google->replyheaders();
 	print $google->replycontent();
-	
+
+
 =head1 CONSTRUCTOR
 
 new ( $domain, $admin, $adminpassword )
@@ -988,9 +1049,7 @@ Note that the constructor will NOT attempt to perform the 'ClientLogin' call to 
 Authentication happens automatically when the first API call is performed. The token will be remembered for the duration of the object, and will be automatically refreshed as needed.
 If you want to verify that you can get a valid token before performing any operations, follow the constructor with a call to IsAuthenticated() as such:
 
-print "Authentication OK\n" unless not $google->IsAuthenticated();
-
-
+	print "Authentication OK\n" unless not $google->IsAuthenticated();
 
 =head1 METHODS
 
@@ -999,144 +1058,261 @@ When a request is properly handled by Google's API engine, the webpost to the AP
 All pages returing the 'Success(2000)' status code will result in the API method succeeding, and returning a 1. All failures return 0.
 Please see the section below on how to access the result data, and how to determine the reasons for errors.
 
+If the web post fails (as determined by the C<HTTP::Request> method IsSuccess() ), the method returns 0, and the {reason} hash is set to a descriptive error.
+You can then examine the raw data to get an idea of what went wrong.
+
 =head2 Checking Authentication
 
-IsAuthenticated
-	will check if the object has been able to authenticate with Google's api engine, and get an authentication ticket.
-	Returns 1 if successful. To see why it may fail, see the $@ variable, and the results->reason hash, and parse the returned page (see the 'content' and 'header' variables.)
-	
-=head2 Methods to Creating/Retrieving/Delete
+IsAuthenticated()
 
-=head2 'Hosted account' methods
+=over
+
+will check if the object has been able to authenticate with Google's api engine, and get an authentication ticket.
+Returns 1 if successful, 0 on failure. To see why it may fail, see the $@ variable, and the $google->{results}->{reason} hash, and parse the returned page (see the 'content' and 'header' variables.)
+
+=back
+
+=head2 Methods to Create/Retrieve/Delete
+
+=head3 'Hosted account' methods
+
+CreateAccountEmail(  $userName, $firstName, $lastName, $password, $quota )
+
+=over
+
+Creates a hosted account with email services in your domains name space.
+The first 4 arguments are required. The $quota argument is optional. If $quota is given, the <quota> tag will be sent with the request, otherwize is will be omitted.
+See the Google API docs for the API call for more details.
+
+=back
 
 CreateAccount(  $userName, $firstName, $lastName, $password )
 
+=over
+
+Creates a hosted account in your domains name space. This account does NOT have email services by default.
+You need to call UpdateAccountEmail() to add email services.
+NOTE: this API call may be discontinued! See CreateAccountEmail() for a replacement.
+
+=back
+
 UpdateAccount( $username, $firstName, $lastName, $password )
+
+=over
 
 $username is the mandatory name of the hosted account. The remaining paramaters are optional, and can be set to 'undef' if you do not wish to change them
 Eg. to change the password on an account, call this as;
-UpdateAccount( $username, undef, undef, 'newpassword' );
+
+=back
+
+	UpdateAccount( $username, undef, undef, 'newpassword' );
+
+=over
 
 to change names only, you would call it as such:
 
-UpdateAccount( $username, 'newfirstname', 'newlastname', undef );
+=back
+
+	UpdateAccount( $username, 'newfirstname', 'newlastname', undef );
 
 
 UpdateAccountEmail( $userName )
 
+=over
+
+Adds email services to a hosted account created with CreateAccount().
+NOTE: this API call may be discontinued! See CreateAccountEmail() for a replacement.
+
+=back
+
 UpdateAccountStatus( $userName, $status )
-	$status is either 'locked' or 'unlocked'
+
+=over	
+
+$status is either 'locked' or 'unlocked'
+
+=back
 
 RetrieveAccount( $userName )
 
 DeleteAccount( $userName )
 
 RenameAccount( $oldName, $newName, $alias )
-	$alias is either '1' or '0'
 
-Note: this method is derived from the Python sample code provided by Google:
+=over
+
+$alias is either '1' or '0'
+
+WARNING: this method is derived from the Python sample code provided by Google:
 (Ie. this may not work yet)
 "Username change. Note that this feature must be explicitly enabled by the domain administrator, and is not enabled by default.
- Args:
-	oldname: user to rename
-	newname: new username to set for the user
-	alias: if 1, create an alias of oldname for newname"	
+Args:
+
+=over
+
+oldname: user to rename
+newname: new username to set for the user
+alias: if 1, create an alias of oldname for newname"	
+
+=back
+
+=back
 
 
-=head2 'Alias' methods
+=head3 'Alias' methods
 
-CreateAlias( $userName, $alias );
+CreateAlias( $userName, $alias )
 
 RetrieveAlias( $userName );
 
 DeleteAlias( $alias );
 
 
-=head2 'Mailing List' methods
+=head3 'Mailing List' methods
 
-CreateMailingList( $mailingListName );
+CreateMailingList( $mailingListName )
 
-UpdateMailingList( $mailingListName, $userName, $listOperation );
-	$listOperation is either 'add' or 'remove'
+UpdateMailingList( $mailingListName, $userName, $listOperation )
 
-RetrieveMailingList( $mailingListName );
+=over
 
-DeleteMailingList( $mailingListName );
+$listOperation is either 'add' or 'remove'
+
+=back
+
+RetrieveMailingList( $mailingListName )
+
+DeleteMailingList( $mailingListName )
 
 
 
 =head2 Methods to set/get variables
 
 After creating the object you can get/set the administrator account and set the password with these methods.
-Note this will cause a re-authentication next time an Google API method is called.
+Note this will cause a re-authentication next time a Google API method is called.
 
 admin( $admin )
-	set the administrative user, and will return administator username.
+
+=over	
+
+set the administrative user, and will return administator username.
+
+=back
+	
 password( $string )
-	set the password, returns an empty string
+
+=over
+
+set the password, returns an empty string
+
+=back
 
 =head2 Miscelleaneous statistics methods
 
 There are a few methods to access some statistics data that is collected while the object performing Google API calls.
 
-authtime()	returns the time of last authentication, as generated by the time() function
+authtime()
 
-ctime()		returns the create time of the object, as generated by the time() function
+=over
 
-rtime()		returns the time of the most recent request, as generated by the time() function
+returns the time of last authentication, as generated by the time() function
 
-logins()	returns the number of API logins that have been performed
+=back
 
-requests()	returns the numbers of API requests that have been submitted to Google
+ctime()
 
-success()	returns the numbers of successful api request performed
+=over
+
+returns the create time of the object, as generated by the time() function
+
+=back
+
+rtime()
+
+=over
+
+returns the time of the most recent request, as generated by the time() function
+
+=back
+
+logins()
+
+=over
+
+returns the number of API logins that have been performed
+
+=back
+
+requests()
+
+=over
+
+returns the numbers of API requests that have been submitted to Google
+
+=back
+
+success()
+
+=over
+
+returns the numbers of successful api request performed
+
+=back
 
 And finally,
 
-version()	returns a string with the api version implemented. This is currently '1.0'
+version()
+
+=over
+
+returns a string with the api version implemented. This is currently '1.0'
+
+=back
 
 
 =head1 ACCESSING RESULTING DATA
 
-Valid return data from Google is parsed into a hash named 'result', available through the object. Under this you can find all elements as returned by Google.
-This hash is produced by XML::Simple. Some of the more useful elements you may need to look at are eg.
+Valid return data from Google is parsed into a hash named 'result', available through the object. In this hash you can find all elements as returned by Google.
+This hash is produced by XML::Simple. See the Google API documentation in the SEE ALSO section for complete details.
+Some of the more useful elements you may need to look at are:
 
-$google->{result}->{reason}		#this typically has the textual reason for a failure
-$google->{result}->{extendedMessage}	#a more extensive description of the failure reason may be here
-$google->{result}->{result}		#typically empty!
-$google->{result}->{type}		#should be same of query type, eg 'Account', 'Alias', 'MailingList'
+	$google->{result}->{reason}		#this typically has the textual reason for a failure
+	$google->{result}->{extendedMessage}	#a more extensive description of the failure reason may be here
+	$google->{result}->{result}		#typically empty!
+	$google->{result}->{type}		#should be same of query type, eg 'Account', 'Alias', 'MailingList'
 
-The retrieval section contains data when you are querying.  (eg. the RetrieveAccount method)
+The retrieval section contains data when you are querying. Here is what this section looks like when you call the RetrieveAccount method:
 
-$google->{result}->{RetrievalSection}->{firstName}
-$google->{result}->{RetrievalSection}->{lastName}
-$google->{result}->{RetrievalSection}->{accountStatus}
-$google->{result}->{RetrievalSection}->{aliases}->{alias}
-$google->{result}->{RetrievalSection}->{emailLists}->{emailList}
+	$google->{result}->{RetrievalSection}->{firstName}
+	$google->{result}->{RetrievalSection}->{lastName}
+	$google->{result}->{RetrievalSection}->{accountStatus}
+	$google->{result}->{RetrievalSection}->{aliases}->{alias}
+	$google->{result}->{RetrievalSection}->{emailLists}->{emailList}
 
 
 To see the structure of the result hash, use the Data::Dumper module as such:
-use Data::Dumper;
-print Dumper($google->{result});
+
+	use Data::Dumper;
+	print Dumper($google->{result});
 
 
 =head1 ACCESSING RAW GOOGLE POST AND RESULT DATA
 
 The data from the most recent post to the Google servers is available. You can access it as:
 
-print $google->requestcontent();
+	print $google->requestcontent();
 
 The most recent received HTML data is stored in two parts, the headers and the content. Both are strings. They can be accessed as such:
 
-print $google->replyheaders();
-print $google->replycontent();
+	print $google->replyheaders();
+	print $google->replycontent();
 
 Note the headers are new-line separated and can easily be parsed:
 
-foreach my $headerline ( split/\n/, $g->replyheaders() )
-{
-	my ($header, $value) = split/:/, $headerline;
-}
+	foreach my $headerline ( split/\n/, $g->replyheaders() )
+	{
+		my ($header, $value) = split/:/, $headerline;
+	}
 
 =head1 EXPORT
 
@@ -1166,6 +1342,5 @@ it under the same terms as Perl itself, either Perl version 5.8.5 or,
 at your option, any later version of Perl 5 you may have available.
 
 If you make useful modification, kindly consider emailing then to me for inclusion in a future version of this module.
-
 
 =cut

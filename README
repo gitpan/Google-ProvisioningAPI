@@ -1,4 +1,4 @@
-Google-ProvisioningAPI version 0.1
+Google-ProvisioningAPI version 0.11
 ===================================
 
 Google::ProvisioningAPI - module that implements the Google Apps for Your Domain Provisioning API
@@ -7,6 +7,7 @@ For a complete description of the Google API, see
 http://code.google.com/apis/apps-for-your-domain/google_apps_provisioning_api_v1.0_reference.html
 
 VERSION
+   v0.11 is a small bug-fix and Google API changes release, see Changes for more
    v0.1 is the initial release
 
 INSTALLATION
